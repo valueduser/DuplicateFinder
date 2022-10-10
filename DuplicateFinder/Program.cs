@@ -7,4 +7,11 @@ AnsiConsole.Markup("[underline red]Hello[/] World!");
 //container.Register(Component.For<ICompositionRoot>().ImplementedBy<CompositionRoot>());
 DuplicateFinder.Core.DuplicateFinder dupe = new DuplicateFinder.Core.DuplicateFinder();
 DuplicateFinder.Models.Options options = new DuplicateFinder.Models.Options();
-dupe.FindDuplicates(options);
+try
+{
+	dupe.FindDuplicates(options);
+}
+catch (Exception e)
+{
+	AnsiConsole.WriteException(e);
+}

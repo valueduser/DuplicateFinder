@@ -2,6 +2,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using DuplicateFinder.Models;
+using Spectre.Console;
 
 namespace DuplicateFinder.Core
 {
@@ -42,7 +43,7 @@ namespace DuplicateFinder.Core
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"Exception encountered getting file name: {ex}");
+				AnsiConsole.WriteLine($"Exception encountered getting file name: {ex}");
 				return "UNKNOWN_FILE";
 			}
 		}
@@ -60,7 +61,7 @@ namespace DuplicateFinder.Core
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"Exception encountered getting file size: {ex}");
+				AnsiConsole.WriteLine($"Exception encountered getting file size: {ex}");
 				return -1;
 			}
 		}
@@ -88,7 +89,7 @@ namespace DuplicateFinder.Core
 				}
 				catch (Exception ex)
 				{
-					Console.WriteLine($"Error hashing {filename}: {ex}");
+					AnsiConsole.WriteLine($"Error hashing {filename}: {ex}");
 					return new byte[] { };
 				}
 			}
@@ -108,7 +109,7 @@ namespace DuplicateFinder.Core
 					}
 					catch (Exception e)
 					{
-						Console.WriteLine($"Error hashing {filename}: {e}");
+						AnsiConsole.WriteLine($"Error hashing {filename}: {e}");
 						return new byte[] { };
 					}
 				}
@@ -127,12 +128,11 @@ namespace DuplicateFinder.Core
 			}
 			catch (Exception e)
 			{
-				Console.WriteLine($"Exception encountered walking the file tree: {e}");
+				AnsiConsole.WriteLine($"Exception encountered walking the file tree: {e}");
 				throw;
 			}
 			int filesFound = fileSystemList.Length;
-			Console.WriteLine($"Found {filesFound} files.");
-
+			
 			return fileSystemList;
 		}
 	}
