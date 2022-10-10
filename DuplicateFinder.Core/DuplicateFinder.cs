@@ -1,8 +1,9 @@
 ﻿using System.IO.Abstractions;
 using DuplicateFinder.Models;
-using System.Collections.Concurrent;
+using DuplicateFinder.Data.Data;
 using System.Net;
 using File = DuplicateFinder.Models.File;
+using Spectre.Console;
 
 namespace DuplicateFinder.Core
 {
@@ -23,7 +24,7 @@ namespace DuplicateFinder.Core
 
 			//TODO: Persist
 			FindDuplicatesInternal(options);
-			
+			//TODO: Report results
 			Console.ReadKey();
 		}
 
@@ -37,7 +38,7 @@ namespace DuplicateFinder.Core
 				if (source.IsLocalFileSystem)
 				{
 					filePaths = fileHelpers.WalkFilePaths(source);
-					PopulateFileMetaData(source.Name, filePaths, duplicateDictionary);
+					PopulateFileMetaData(source.Name, filePaths, options.Config.HashSizeLimitInKB);
 				}
 				else
 				{
@@ -46,84 +47,60 @@ namespace DuplicateFinder.Core
 					CredentialCache netCache = new CredentialCache();
 					netCache.Add(pathUri, authType, networkCred);
 					filePaths = fileHelpers.WalkFilePaths(source);
-					PopulateFileMetaData(source.Name, filePaths, duplicateDictionary);
+					PopulateFileMetaData(source.Name, filePaths, options.Config.HashSizeLimitInKB);
 					netCache.Remove(pathUri, authType);
 				}
 			}
 		}
 
-		internal ConcurrentDictionary<string, List<File>> PopulateFileMetaData(string sourceName, string[] files, ConcurrentDictionary<string, List<File>> duplicateDictionary)
+		internal void PopulateFileMetaData(string sourceName, string[] files, int hashLimit)
 		{
-			Console.WriteLine("Populating metadata for discovered files...");
+			AnsiConsole.Markup("Populating metadata for discovered files...");
 
-			bool isInConsole = IsConsoleApplication();
-
-			var pb = isInConsole ? new ProgressBar(PbStyle.DoubleLine, files.Length) : null;
-			int lastIncrement = 0;
-
-			if (isInConsole) pb.Refresh(0, "Initializing...");
-
-			int i = 0;
 			foreach (string filePath in files)
 			{
-				// Only update the progress bar occasionally
-				if (isInConsole && Math.Floor(i * 100.0 / files.Length) > lastIncrement || i == files.Length)
-				{
-					string tempFilePath = filePath;
-					if (filePath.Contains("{"))
-					{
-						tempFilePath = tempFilePath.Replace("{", "");
-					}
-					if (filePath.Contains("}"))
-					{
-						tempFilePath = tempFilePath.Replace("}", "");
-					}
-
-					try
-					{
-						pb.Refresh(i, tempFilePath);
-						lastIncrement = (i * 100 / files.Length);
-					}
-					catch (Exception e)
-					{
-						Console.WriteLine(e);
-					}
-				}
-
 				if (!String.IsNullOrEmpty(filePath))
 				{
-					using FileUtilContext context = new FileUtilContext();
+					using DuplicateFinderContext context = new DuplicateFinderContext();
 
-					long fileSize = _fileSystemHelper.GetFileSize(filePath);
+					string fileName = fileHelpers.GetFileName(filePath);
+					if (fileName == "_._")
+					{
+						//Ignore empty directory placeholder
+						continue;
+					}
+
+					long fileSize = fileHelpers.GetFileSize(filePath);
+
 					File tempFile = new File
 					{
 						Path = filePath,
-						Name = _fileSystemHelper.GetFileName(filePath),
+						Name = fileName,
 						SizeInKiloBytes = fileSize,
 						Source = sourceName
 					};
 
-					var hashValue = _fileSystemHelper.GetHashedValue(filePath, fileSize, hashLimit);
+					//TODO: add option to hash only a portion of the file AND / OR check the files table. if the filename && size && path are the same as an entry in the files table, don't bother hashing (optionally) - just use the value from the table
+					var hashValue = fileHelpers.GetHashedValue(filePath, fileSize, hashLimit);
 
+					//TODO: Handle situations where both the existing hash and the temp hash are partial / full or mixed
 					var existingHash = context.Hash
 						.Where(h => h.Value == hashValue && h.IsPartial == hashLimit > 0)
 						.FirstOrDefault();
-					Hash tempHash = null;
 
 					if (existingHash != null)
 					{
-						existingHash.ModifiedOn = DateTime.UtcNow;
 						existingHash.HasDuplicate = true;
+						existingHash.ModifiedOn = DateTime.UtcNow;
 						tempFile.Hash = existingHash;
 					}
 					else
 					{
-						tempHash = new Hash
+						Hash tempHash = new Hash
 						{
-							//todo: add option to hash only a portion of the file AND / OR check the files table. if the filename && size && path are the same as an entry in the files table, don't bother hashing (optionally) - just use the value from the table
+							HasDuplicate = false,
 							Value = hashValue,
 							IsPartial = hashLimit > 0,
-							HasDuplicate = false,
 							CreatedOn = DateTime.UtcNow
 						};
 						tempFile.Hash = tempHash;
@@ -131,19 +108,9 @@ namespace DuplicateFinder.Core
 					context.File.Add(tempFile);
 
 					context.SaveChanges();
-
-					//Ignore empty directory placeholder
-					if (tempFile.Name == "_._")
-					{
-						continue;
-					}
-
-					duplicateDictionary.AddOrUpdate(tempFile.Hash.Value, new List<File>() { tempFile }, (key, value) => { value.Add(tempFile); return value; });
 				}
-				i++;
 			}
-			Console.WriteLine("\n...done.");
-			return duplicateDictionary;
+			AnsiConsole.Markup("\n...done.");
 		}
 
 		public void ValidateOptions(Options options)

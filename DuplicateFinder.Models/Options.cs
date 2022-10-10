@@ -12,7 +12,8 @@ namespace DuplicateFinder.Models
 			Sources = new List<Source>();
 			Config = new Config();
 			var configuration = new ConfigurationBuilder()
-						.AddJsonFile("appsettings.json")
+					.SetBasePath(AppContext.BaseDirectory)
+					.AddJsonFile("./appsettings.json")
 			.Build();
 
 			for (var i = 0; configuration[$"Sources:{i}:SourceName"] != null; i++)
