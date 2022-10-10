@@ -6,15 +6,19 @@ namespace DuplicateFinder.Data.Data
 {
 	public class DuplicateFinderContext : DbContext
 	{
+		private string connectionString;
+
+		public DuplicateFinderContext(PersistenceConfig config)
+		{
+			connectionString = @$"Host={config.Host};port={config.Port};Username={config.User};Password={config.Password};Database={config.Database}";
+		}
+
 		public DbSet<Hash> Hash { get; set; } = null!;
 		public DbSet<File> File { get; set; } = null!;
 
-
-		protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-		{
-			//TODO: don't hard code
-			optionsBuilder.UseNpgsql(@"Host=localhost;port=5432;Username=postgres;Password=postgres;Database=postgres");
-		}
+		protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) 
+			=> optionsBuilder.UseNpgsql(connectionString);
+		
 
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{

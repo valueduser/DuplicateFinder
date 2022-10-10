@@ -4,9 +4,7 @@ using DuplicateFinder.Data.Data;
 using System.Net;
 using File = DuplicateFinder.Models.File;
 using Spectre.Console;
-using Microsoft.Extensions.Options;
 using Options = DuplicateFinder.Models.Options;
-using Microsoft.EntityFrameworkCore;
 
 namespace DuplicateFinder.Core
 {
@@ -27,12 +25,8 @@ namespace DuplicateFinder.Core
 				ValidateOptions(options);
 			});
 			
-			//ConcurrentDictionary<string, List<File>> duplicates = dupeFinder.FindDuplicateFiles(job);
-			//dupeFinder.ReportResults(duplicates);
-
-			//TODO: Persist
 			FindDuplicatesInternal(options);
-			using DuplicateFinderContext context = new DuplicateFinderContext();
+			using DuplicateFinderContext context = new DuplicateFinderContext(options.Config.PersistenceConfig);
 			var numberOfDuplicates =
 				(from h in context.Hash
 				 join f in context.File
@@ -56,7 +50,7 @@ namespace DuplicateFinder.Core
 				if (source.IsLocalFileSystem)
 				{
 					filePaths = fileHelpers.WalkFilePaths(source);
-					PopulateFileMetaData(source.Name, filePaths, options.Config.HashSizeLimitInKB);
+					PopulateFileMetaData(source.Name, filePaths, options);
 				}
 				else
 				{
@@ -65,14 +59,15 @@ namespace DuplicateFinder.Core
 					CredentialCache netCache = new CredentialCache();
 					netCache.Add(pathUri, authType, networkCred);
 					filePaths = fileHelpers.WalkFilePaths(source);
-					PopulateFileMetaData(source.Name, filePaths, options.Config.HashSizeLimitInKB);
+					PopulateFileMetaData(source.Name, filePaths, options);
 					netCache.Remove(pathUri, authType);
 				}
 			}
 		}
 
-		internal void PopulateFileMetaData(string sourceName, string[] files, int hashLimit)
+		internal void PopulateFileMetaData(string sourceName, string[] files, Options options)
 		{
+			int hashLimit = options.Config.HashSizeLimitInKB;
 			AnsiConsole.Status()
 			.Spinner(Spinner.Known.Dots)
 			.Start($"Populating metadata for discovered files on {sourceName}...", ctx => {
@@ -80,7 +75,7 @@ namespace DuplicateFinder.Core
 				{
 					if (!String.IsNullOrEmpty(filePath))
 					{
-						using DuplicateFinderContext context = new DuplicateFinderContext();
+						using DuplicateFinderContext context = new DuplicateFinderContext(options.Config.PersistenceConfig);
 
 						string fileName = fileHelpers.GetFileName(filePath);
 						if (fileName == "_._")
@@ -88,6 +83,13 @@ namespace DuplicateFinder.Core
 							//Ignore empty directory placeholder
 							continue;
 						}
+
+						// TODO: check if this file path already exists unless Config.ForceRehash is true
+						var alreadyFile = from f in context.File
+										  where f.Path.Equals(filePath)
+										  where f.Source.Equals(sourceName)
+										  select f;
+
 
 						long fileSize = fileHelpers.GetFileSize(filePath);
 
@@ -136,7 +138,6 @@ namespace DuplicateFinder.Core
 						{
 							context.File.Add(tempFile);
 						}
-
 
 						context.SaveChanges();
 					}

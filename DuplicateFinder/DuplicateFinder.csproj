@@ -12,6 +12,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Sentry" Version="3.22.0" />
     <PackageReference Include="Spectre.Console" Version="0.45.0" />
   </ItemGroup>
 
