@@ -10,7 +10,7 @@ namespace DuplicateFinder.Core
 	{
 		string GetFileName(string pathToFile);
 		long GetFileSize(string pathToFile);
-		string[] WalkFilePaths(Source source);
+		List<string> WalkFilePaths(Source source);
 		string GetHashedValue(string pathToFile, long fileSize, long hashLimit = 0);
 	}
 
@@ -116,22 +116,22 @@ namespace DuplicateFinder.Core
 			}
 		}
 
-		public string[] WalkFilePaths(Source source)
+		public List<string> WalkFilePaths(Source source)
 		{
 
 			//Console.WriteLine("Walking file system paths...");
-			string[] fileSystemList = new string[] { };
+			List<String> fileSystemList = new List<string>();
 
 			try
 			{
-				fileSystemList = _fileSystem.Directory.GetFiles(source.Path, "*.*", System.IO.SearchOption.AllDirectories);
+				fileSystemList = _fileSystem.Directory.GetFiles(source.UncPath, "*.*", System.IO.SearchOption.AllDirectories).ToList<String>();
 			}
 			catch (Exception e)
 			{
 				AnsiConsole.WriteLine($"Exception encountered walking the file tree: {e}");
 				throw;
 			}
-			int filesFound = fileSystemList.Length;
+			int filesFound = fileSystemList.Count;
 			
 			return fileSystemList;
 		}
