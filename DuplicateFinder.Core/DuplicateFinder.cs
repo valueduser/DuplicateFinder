@@ -11,6 +11,7 @@ using System.IO;
 using System.Net.NetworkInformation;
 using EzSmb;
 using System.Xml.Linq;
+using System.Net.Sockets;
 
 namespace DuplicateFinder.Core
 {
@@ -27,10 +28,11 @@ namespace DuplicateFinder.Core
 		{
 			AnsiConsole.Status()
 			.Spinner(Spinner.Known.Dots)
-			.Start("Validating options...", ctx => {
+			.Start("Validating options...", ctx =>
+			{
 				ValidateOptions(options);
 			});
-			
+
 			FindDuplicatesInternal(options);
 			using DuplicateFinderContext context = new DuplicateFinderContext(options.Config.PersistenceConfig);
 			var numberOfDuplicates =
@@ -57,39 +59,40 @@ namespace DuplicateFinder.Core
 				{
 					filePaths = fileHelpers.WalkFilePaths(source);
 					PopulateFileMetaData(source.Name, filePaths, options);
-                }
+				}
 				else if (true)
 				{
 					Stack<Node> nodes = new Stack<Node>();
-                    IPAddress? serverIp = Dns.GetHostAddresses(source.ServerName).FirstOrDefault();
-                    var rootDirectoryNodes = Node.GetNode(@$"{serverIp}\{source.ShareName}", source.NetworkShareUser, source.NetworkSharePassword).GetAwaiter().GetResult().GetList().GetAwaiter().GetResult().ToList();
+					IPAddress? serverIp = Dns.GetHostAddresses(source.ServerName).Where(address => address.AddressFamily == AddressFamily.InterNetwork).FirstOrDefault();
+					var rootDirectoryNodes = Node.GetNode(@$"{serverIp}\{source.ShareName}", source.NetworkShareUser, source.NetworkSharePassword).GetAwaiter().GetResult()
+						.GetList().GetAwaiter().GetResult().ToList(); // :\
 					rootDirectoryNodes.ForEach(node => nodes.Push(node));
 
-					while(nodes.Count > 0)
+					while (nodes.Count > 0)
 					{
 						Node current = nodes.Pop();
-                        if (current.Type == NodeType.Folder)
+						if (current.Type == NodeType.Folder)
 						{
-                            var test = current.GetList().GetAwaiter().GetResult();
-                            var newNodes = test.ToList<Node>();
-                            newNodes.ForEach(node =>
-                            {
-                                if (node.Type == NodeType.Folder)
-                                {
-                                    nodes.Push(node);
-                                }
-                                else
-                                {
-                                    AnsiConsole.WriteLine($"it's a file {node.FullPath}");
-                                }
-                            });
-                        }
-                            
+							var test = current.GetList().GetAwaiter().GetResult();
+							var newNodes = test.ToList<Node>();
+							newNodes.ForEach(node =>
+							{
+								if (node.Type == NodeType.Folder)
+								{
+									nodes.Push(node);
+								}
+								else
+								{
+									AnsiConsole.WriteLine($"it's a file {node.FullPath}");
+									filePaths.Add(node.FullPath);
+								}
+							});
+						}
 					}
-					AnsiConsole.WriteLine(nodes.Count);
+					AnsiConsole.WriteLine(filePaths.Count);
 
-                }
-                else if (false)
+				}
+				else if (false)
 				{
 					// TODO: Constants
 					int DIRECTORY_FILE_TYPE = 48; //., .., folder, etc
@@ -97,35 +100,36 @@ namespace DuplicateFinder.Core
 					int FILE_TYPE = 32;
 					string[] DIRECTORY_IGNORE_LIST = { ".", ".." };
 
-                    SMB2Client client = new SMB2Client();
-                    IPAddress? serverIp = Dns.GetHostAddresses(source.ServerName).FirstOrDefault();
+					SMB2Client client = new SMB2Client();
+					IPAddress? serverIp = Dns.GetHostAddresses(source.ServerName).FirstOrDefault();
 
-                    bool isConnected = client.Connect(serverIp, SMBTransportType.DirectTCPTransport);
+					bool isConnected = client.Connect(serverIp, SMBTransportType.DirectTCPTransport);
 					if (isConnected)
 					{
 						NTStatus status = client.Login(string.Empty, source.NetworkShareUser, source.NetworkSharePassword);
 						if (status == NTStatus.STATUS_SUCCESS)
 						{
 							ISMBFileStore fileStore = client.TreeConnect(source.ShareName, out status);
-                            object rootDirectoryHandle;
-                            FileStatus fileStatus;
-                            status = fileStore.CreateFile(out rootDirectoryHandle, out fileStatus, String.Empty, AccessMask.GENERIC_READ, SMBLibrary.FileAttributes.Directory, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, CreateOptions.FILE_DIRECTORY_FILE, null);
-                            if (status == NTStatus.STATUS_SUCCESS)
-                            {
-                                List<QueryDirectoryFileInformation> fileList;
-                                status = fileStore.QueryDirectory(out fileList, rootDirectoryHandle, "*", FileInformationClass.FileDirectoryInformation);
-                                status = fileStore.CloseFile(rootDirectoryHandle);
+							object rootDirectoryHandle;
+							FileStatus fileStatus;
+							status = fileStore.CreateFile(out rootDirectoryHandle, out fileStatus, String.Empty, AccessMask.GENERIC_READ, SMBLibrary.FileAttributes.Directory, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, CreateOptions.FILE_DIRECTORY_FILE, null);
+							if (status == NTStatus.STATUS_SUCCESS)
+							{
+								List<QueryDirectoryFileInformation> fileList;
+								status = fileStore.QueryDirectory(out fileList, rootDirectoryHandle, "*", FileInformationClass.FileDirectoryInformation);
+								status = fileStore.CloseFile(rootDirectoryHandle);
 								foreach (var item in fileList)
 								{
-                                    var fileInfo = (item as FileDirectoryInformation);
-                                    AnsiConsole.WriteLine($"FileName:{fileInfo.FileName} Type:{fileInfo.FileAttributes} ({(int)fileInfo.FileAttributes})");
-									if((int)fileInfo.FileAttributes == DIRECTORY_FILE_TYPE && !DIRECTORY_IGNORE_LIST.Contains(fileInfo.FileName))
+									var fileInfo = (item as FileDirectoryInformation);
+									AnsiConsole.WriteLine($"FileName:{fileInfo.FileName} Type:{fileInfo.FileAttributes} ({(int)fileInfo.FileAttributes})");
+									if ((int)fileInfo.FileAttributes == DIRECTORY_FILE_TYPE && !DIRECTORY_IGNORE_LIST.Contains(fileInfo.FileName))
 									{
 										AnsiConsole.WriteLine("Pushin to stack");
-									} else
+									}
+									else
 									{
-                                        AnsiConsole.WriteLine($"{fileInfo.FileName}: {(int)fileInfo.FileAttributes}");
-                                    }
+										AnsiConsole.WriteLine($"{fileInfo.FileName}: {(int)fileInfo.FileAttributes}");
+									}
 									//if (item.GetType == Type.Directory "Directory")
 									//var fileInfo = (item as FileDirectoryInformation);
 									//if (fileInfo != null)
@@ -135,35 +139,35 @@ namespace DuplicateFinder.Core
 									//}
 								}
 							}
-                            status = fileStore.Disconnect();
-                        }
-                        
-                    }
-                   
+							status = fileStore.Disconnect();
+						}
 
-                    //             object directoryHandle = null;
-                    //             var status = client.Login(string.Empty, source.NetworkShareUser, source.NetworkSharePassword);
-                    //             var fileStore = client.TreeConnect(source.ShareName, out status);
-                    //             if (isConnected)
-                    //                 status = fileStore.CreateFile(out directoryHandle, out FileStatus fileStatus, string.Empty, AccessMask.GENERIC_READ, SMBLibrary.FileAttributes.Directory, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, CreateOptions.FILE_DIRECTORY_FILE, null);
-                    //             if (status == NTStatus.STATUS_SUCCESS)
-                    //             {
-                    //                 List<QueryDirectoryFileInformation> test2;
-                    //                 status = fileStore.QueryDirectory(out test2, directoryHandle, "*", FileInformationClass.FileIdFullDirectoryInformation);
-                    //                 foreach (var item in test2)
-                    //                 {
-                    //                     var fileInfo = (item as FileDirectoryInformation);
-                    //if (fileInfo != null)
-                    //{
-                    //                         AnsiConsole.WriteLine($"FileName:{fileInfo.FileName} Type:{fileInfo.FileAttributes}");
-                    //                     }
-                    //                 }
-                    //             }
-                }
-                else
-                {
-                    // windows only 
-                    System.Uri pathUri = new System.Uri(source.UncPath);
+					}
+
+
+					//             object directoryHandle = null;
+					//             var status = client.Login(string.Empty, source.NetworkShareUser, source.NetworkSharePassword);
+					//             var fileStore = client.TreeConnect(source.ShareName, out status);
+					//             if (isConnected)
+					//                 status = fileStore.CreateFile(out directoryHandle, out FileStatus fileStatus, string.Empty, AccessMask.GENERIC_READ, SMBLibrary.FileAttributes.Directory, ShareAccess.Read | ShareAccess.Write, CreateDisposition.FILE_OPEN, CreateOptions.FILE_DIRECTORY_FILE, null);
+					//             if (status == NTStatus.STATUS_SUCCESS)
+					//             {
+					//                 List<QueryDirectoryFileInformation> test2;
+					//                 status = fileStore.QueryDirectory(out test2, directoryHandle, "*", FileInformationClass.FileIdFullDirectoryInformation);
+					//                 foreach (var item in test2)
+					//                 {
+					//                     var fileInfo = (item as FileDirectoryInformation);
+					//if (fileInfo != null)
+					//{
+					//                         AnsiConsole.WriteLine($"FileName:{fileInfo.FileName} Type:{fileInfo.FileAttributes}");
+					//                     }
+					//                 }
+					//             }
+				}
+				else
+				{
+					// windows only 
+					System.Uri pathUri = new System.Uri(source.UncPath);
 					NetworkCredential networkCred = new NetworkCredential(source.NetworkShareUser, source.NetworkSharePassword, source.NetworkShareDomain);
 					CredentialCache netCache = new CredentialCache();
 					netCache.Add(pathUri, authType, networkCred);
@@ -179,7 +183,8 @@ namespace DuplicateFinder.Core
 			int hashLimit = options.Config.HashSizeLimitInKB;
 			AnsiConsole.Status()
 			.Spinner(Spinner.Known.Dots)
-			.Start($"Populating metadata for discovered files on {sourceName}...", ctx => {
+			.Start($"Populating metadata for discovered files on {sourceName}...", ctx =>
+			{
 				foreach (string filePath in files)
 				{
 					if (!String.IsNullOrEmpty(filePath))
@@ -239,7 +244,7 @@ namespace DuplicateFinder.Core
 						var fileExists = context.File
 						.Where(f =>
 							f.SizeInKiloBytes == tempFile.SizeInKiloBytes &&
-							f.Path == tempFile.Path && 
+							f.Path == tempFile.Path &&
 							f.Name == tempFile.Name &&
 							f.Hash == tempFile.Hash
 						).FirstOrDefault();
@@ -268,9 +273,9 @@ namespace DuplicateFinder.Core
 
 				if (String.IsNullOrEmpty(source.UncPath) && String.IsNullOrEmpty(source.ServerName))
 				{
-                    throw new ArgumentException("");
-                }
-            });
+					throw new ArgumentException("");
+				}
+			});
 		}
 	}
 }

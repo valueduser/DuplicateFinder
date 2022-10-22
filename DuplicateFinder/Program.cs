@@ -25,5 +25,6 @@ using (SentrySdk.Init(o =>
 	{
 		SentrySdk.CaptureException(e);
 		AnsiConsole.WriteException(e);
+		Console.ReadKey();
 	}
 }
