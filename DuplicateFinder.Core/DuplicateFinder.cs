@@ -90,7 +90,7 @@ namespace DuplicateFinder.Core
 						}
 					}
 					AnsiConsole.WriteLine(filePaths.Count);
-
+					PopulateFileMetaData(source.Name, filePaths, options);
 				}
 				else if (false)
 				{
@@ -197,6 +197,7 @@ namespace DuplicateFinder.Core
 							//Ignore empty directory placeholder
 							continue;
 						}
+						AnsiConsole.WriteLine(fileName);
 
 						// TODO: check if this file path already exists unless Config.ForceRehash is true
 						var alreadyFile = from f in context.File
